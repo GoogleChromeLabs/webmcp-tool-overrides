@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>WebMCP Tool Override - Rule Manager & Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body>
+  <div class="dashboard-container">
+
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="brand-section">
+        <div class="brand-logo">M</div>
+        <div class="brand-title-group">
+          <h1>WebMCP Tool Override</h1>
+          <p>Rule Manager, Automation Controller & Interception Sandbox</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn" id="exportBtn">📥 Export JSON</button>
+        <button class="btn" id="importBtn">📤 Import JSON</button>
+        <input type="file" id="importFileInput" accept=".json" style="display: none;">
+        <button class="btn btn-primary" id="addOriginGroupBtn">➕ New Origin Group</button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="rules-tab">Origin Rules</button>
+      <button class="tab-btn" data-tab="simulator-tab">WebMCP Simulator Sandbox</button>
+      <button class="tab-btn" data-tab="logs-tab">Audit Logs</button>
+      <button class="tab-btn" data-tab="settings-tab">Settings</button>
+    </nav>
+
+    <!-- Tab 1: Origin Rules -->
+    <main class="tab-content active" id="rules-tab">
+      <div class="group-list" id="originGroupsList">
+        <!-- Rendered origin group cards dynamically -->
+      </div>
+    </main>
+
+    <!-- Tab 2: WebMCP Simulator Sandbox -->
+    <main class="tab-content" id="simulator-tab">
+      <div class="simulator-box">
+        <h2>WebMCP Interception Simulator Sandbox</h2>
+        <p style="color: var(--text-muted); margin-bottom: 16px;">Test how your active origin rules intercept, block,
+          rename, rewrite, or inject tools for any target URL.</p>
+
+        <div class="form-group">
+          <label class="form-label">Simulated Origin / URL</label>
+          <input type="text" class="form-input" id="simOrigin" value="https://shop.example.com">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Simulated Registered Tool Name</label>
+          <input type="text" class="form-input" id="simToolName" value="search_catalog">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Simulated Registered Tool Description</label>
+          <input type="text" class="form-input" id="simToolDesc" value="Search items in product catalog">
+        </div>
+
+        <button class="btn btn-primary" id="runSimBtn">▶️ Run Simulation</button>
+
+        <div class="terminal" id="simOutput">Terminal output will appear here after running simulation...</div>
+      </div>
+    </main>
+
+    <!-- Tab 3: Audit Logs -->
+    <main class="tab-content" id="logs-tab">
+      <div class="simulator-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2>Real-Time Interception Logs</h2>
+          <button class="btn btn-danger btn-sm" id="clearLogsBtn">🗑️ Clear Logs</button>
+        </div>
+        <div class="terminal" id="logsOutput" style="min-height: 300px; color: #a78bfa;">No audit log events recorded
+          yet.</div>
+      </div>
+    </main>
+
+    <!-- Tab 4: Settings -->
+    <main class="tab-content" id="settings-tab">
+      <div class="simulator-box">
+        <h2 style="margin-bottom: 16px;">Extension Settings</h2>
+
+        <div class="form-group" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>Log Interception Events</strong>
+            <p style="color: var(--text-muted); font-size: 12px;">Store history of blocked, renamed, rewritten, and
+              injected tools.</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="settingLogInterceptions" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="form-group"
+          style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+          <div>
+            <strong>Local Automation HTTP Server Polling</strong>
+            <p style="color: var(--text-muted); font-size: 12px;">Automatically sync rules from
+              http://127.0.0.1:8999/webmcp-rules.json</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="settingAutomationServer">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label class="form-label">Local Automation Server URL</label>
+          <input type="text" class="form-input" id="settingAutomationUrl"
+            value="http://127.0.0.1:8999/webmcp-rules.json">
+        </div>
+
+        <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Origin Group Modal -->
+  <div class="modal-overlay" id="groupModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="groupModalTitle">New Origin Group</div>
+        <button class="btn btn-sm" id="closeGroupModalBtn">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Group Name</label>
+        <input type="text" class="form-input" id="groupNameInput" placeholder="e.g. E-Commerce Store Rules">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Origin Pattern (Globs supported)</label>
+        <input type="text" class="form-input" id="groupOriginInput" placeholder="*://*.example.com/*">
+        <span style="font-size: 11px; color: var(--text-muted);">Use *://*/* for global rules across all
+          websites.</span>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button class="btn" id="cancelGroupModalBtn">Cancel</button>
+        <button class="btn btn-primary" id="saveGroupModalBtn">Save Group</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule Form Modal -->
+  <div class="modal-overlay" id="ruleModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="ruleModalTitle">Add Rule</div>
+        <button class="btn btn-sm" id="closeRuleModalBtn">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Action Type</label>
+        <select class="form-select" id="ruleActionTypeInput">
+          <option value="block">🛑 BLOCK Tool</option>
+          <option value="rename">✏️ RENAME Tool</option>
+          <option value="rewrite">📝 REWRITE Tool Description</option>
+          <option value="inject">⚡ INJECT Synthetic Tool</option>
+        </select>
+      </div>
+
+      <div id="standardRuleFields">
+        <div class="form-group">
+          <label class="form-label">Target Tool Name Pattern</label>
+          <input type="text" class="form-input" id="ruleTargetToolInput"
+            placeholder="e.g. search_* or dangerous_action">
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="ruleIsRegexInput">
+          <label for="ruleIsRegexInput" style="font-size: 12px;">Is Regex Pattern</label>
+        </div>
+      </div>
+
+      <!-- Rename Field -->
+      <div id="renameFields" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">Rename Tool To</label>
+          <input type="text" class="form-input" id="ruleRenameToInput" placeholder="e.g. query_inventory">
+        </div>
+      </div>
+
+      <!-- Rewrite Fields -->
+      <div id="rewriteFields" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">Rewrite Mode</label>
+          <select class="form-select" id="ruleRewriteModeInput">
+            <option value="static">Static Replacement</option>
+            <option value="prepend">Prepend Substring</option>
+            <option value="append">Append Substring</option>
+            <option value="regex_replace">Regex Substring Replacement</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Replacement Text / Substring</label>
+          <input type="text" class="form-input" id="ruleRewriteReplacementInput" placeholder="New description or text">
+        </div>
+      </div>
+
+      <!-- Inject Fields -->
+      <div id="injectFields" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">Synthetic Tool Name</label>
+          <input type="text" class="form-input" id="ruleInjectNameInput" placeholder="e.g. synthetic_helper">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Synthetic Tool Description</label>
+          <input type="text" class="form-input" id="ruleInjectDescInput" placeholder="Tool description for AI agent">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Handler Type</label>
+          <select class="form-select" id="ruleInjectHandlerTypeInput">
+            <option value="js_script">Custom JS Function String</option>
+            <option value="mock_response">Static Mock Response</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Custom JS Function String (e.g. (args) => ({ ok: true }))</label>
+          <textarea class="form-textarea" id="ruleInjectScriptInput"
+            placeholder="(args) => ({ status: 'success', data: args })"></textarea>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button class="btn" id="cancelRuleModalBtn">Cancel</button>
+        <button class="btn btn-primary" id="saveRuleModalBtn">Save Rule</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+
+</html>

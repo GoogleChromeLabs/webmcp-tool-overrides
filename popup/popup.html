@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>WebMCP Tool Override</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="header">
+    <div class="brand">
+      <div class="logo-icon">M</div>
+      <div class="brand-title">WebMCP ToolOverride</div>
+    </div>
+  </div>
+
+  <div class="origin-badge" id="originBadge">
+    <div class="origin-dot" id="originDot"></div>
+    <span id="currentOriginText">Detecting Tab Origin...</span>
+  </div>
+
+  <div class="toggle-container">
+    <span class="toggle-label">Global Overrides Enabled</span>
+    <label class="switch">
+      <input type="checkbox" id="globalToggle" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="section-title">Active Origin Rules</div>
+  <div class="groups-container" id="groupsContainer">
+    <div class="empty-state">Loading active rules...</div>
+  </div>
+
+  <button class="dashboard-btn" id="openDashboardBtn">
+    <span>⚙️ Open Rule Manager & Dashboard</span>
+  </button>
+
+  <script type="module" src="popup.js"></script>
+</body>
+
+</html>
