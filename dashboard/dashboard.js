@@ -61,6 +61,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ruleTargetToolInput = document.getElementById('ruleTargetToolInput');
   const ruleIsRegexInput = document.getElementById('ruleIsRegexInput');
   const ruleRenameToInput = document.getElementById('ruleRenameToInput');
+  const ruleTargetParamInput = document.getElementById('ruleTargetParamInput');
+  const ruleRenameParamToInput = document.getElementById('ruleRenameParamToInput');
   const ruleRewriteModeInput = document.getElementById('ruleRewriteModeInput');
   const ruleRewriteReplacementInput = document.getElementById('ruleRewriteReplacementInput');
   const ruleInjectNameInput = document.getElementById('ruleInjectNameInput');
@@ -74,6 +76,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const standardRuleFields = document.getElementById('standardRuleFields');
   const renameFields = document.getElementById('renameFields');
   const rewriteFields = document.getElementById('rewriteFields');
+  const targetParamField = document.getElementById('targetParamField');
+  const renameParamToField = document.getElementById('renameParamToField');
   const injectFields = document.getElementById('injectFields');
 
   // Simulator & Logs Elements
@@ -226,6 +230,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           } else if (rule.actionType === 'rename') {
             target.textContent = `RENAME: ${rule.targetToolName} ➔ ${rule.renameTo}`;
             desc.textContent = rule.name || 'Rename rule';
+          } else if (rule.actionType === 'rename_param') {
+            target.textContent = `RENAME PARAM (${rule.targetToolName}): ${rule.targetParam} ➔ ${rule.renameTo}`;
+            desc.textContent = rule.name || 'Rename parameter';
+          } else if (rule.actionType === 'rewrite_param_desc') {
+            target.textContent = `REWRITE PARAM DESC (${rule.targetToolName}): ${rule.targetParam}`;
+            desc.textContent = `Mode: ${rule.rewriteConfig ? rule.rewriteConfig.mode : 'static'}`;
           } else if (rule.actionType === 'rewrite') {
             target.textContent = `REWRITE: ${rule.targetToolName}`;
             desc.textContent = `Mode: ${rule.rewriteConfig ? rule.rewriteConfig.mode : 'static'} | Replacement: "${rule.rewriteConfig ? rule.rewriteConfig.replacement : ''}"`;
@@ -347,7 +357,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const actionType = ruleActionTypeInput.value;
     standardRuleFields.style.display = actionType === 'inject' ? 'none' : 'block';
     renameFields.style.display = actionType === 'rename' ? 'block' : 'none';
-    rewriteFields.style.display = actionType === 'rewrite' ? 'block' : 'none';
+    rewriteFields.style.display = (actionType === 'rewrite' || actionType === 'rewrite_param_desc') ? 'block' : 'none';
+    targetParamField.style.display = (actionType === 'rename_param' || actionType === 'rewrite_param_desc') ? 'block' : 'none';
+    renameParamToField.style.display = actionType === 'rename_param' ? 'block' : 'none';
     injectFields.style.display = actionType === 'inject' ? 'block' : 'none';
   }
 
@@ -368,6 +380,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         ruleTargetToolInput.value = r.targetToolName || '';
         ruleIsRegexInput.checked = Boolean(r.isRegexPattern);
         ruleRenameToInput.value = r.renameTo || '';
+        ruleTargetParamInput.value = r.targetParam || '';
+        ruleRenameParamToInput.value = r.renameTo || '';
         ruleRewriteModeInput.value = r.rewriteConfig ? r.rewriteConfig.mode : 'static';
         ruleRewriteReplacementInput.value = r.rewriteConfig ? r.rewriteConfig.replacement : '';
         ruleInjectNameInput.value = r.injectedTool ? r.injectedTool.name : '';
@@ -381,6 +395,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       ruleTargetToolInput.value = '';
       ruleIsRegexInput.checked = false;
       ruleRenameToInput.value = '';
+      ruleTargetParamInput.value = '';
+      ruleRenameParamToInput.value = '';
       ruleRewriteModeInput.value = 'static';
       ruleRewriteReplacementInput.value = '';
       ruleInjectNameInput.value = 'synthetic_tool';
@@ -407,7 +423,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       actionType,
       targetToolName: ruleTargetToolInput.value.trim() || '*',
       isRegexPattern: ruleIsRegexInput.checked,
-      renameTo: ruleRenameToInput.value.trim(),
+      renameTo: actionType === 'rename_param' ? ruleRenameParamToInput.value.trim() : ruleRenameToInput.value.trim(),
+      targetParam: ruleTargetParamInput.value.trim(),
       rewriteConfig: {
         mode: ruleRewriteModeInput.value,
         replacement: ruleRewriteReplacementInput.value

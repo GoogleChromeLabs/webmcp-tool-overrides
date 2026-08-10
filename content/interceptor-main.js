@@ -32,6 +32,7 @@
   // Active state
   let activeOriginGroups = [];
   const registeredToolsMap = new Map();
+  const toolAliases = new Map();
   let onToolChangeHandler = null;
   let rulesLoaded = false;
   const queuedRegistrations = [];
@@ -235,6 +236,92 @@
               ruleName: rule.name
             });
           }
+
+          if (rule.actionType === 'rewrite_param_desc' && rule.targetParam && rule.rewriteConfig) {
+            if (currentTool.inputSchema && currentTool.inputSchema.properties && currentTool.inputSchema.properties[rule.targetParam]) {
+              if (!currentTool.__schemaCloned) {
+                currentTool.inputSchema = JSON.parse(JSON.stringify(currentTool.inputSchema));
+                currentTool.__schemaCloned = true;
+              }
+              const param = currentTool.inputSchema.properties[rule.targetParam];
+              const prevDesc = param.description || '';
+              const config = rule.rewriteConfig;
+              
+              if (config.mode === 'static') {
+                param.description = config.replacement || '';
+              } else if (config.mode === 'prepend') {
+                param.description = (config.replacement || '') + prevDesc;
+              } else if (config.mode === 'append') {
+                param.description = prevDesc + (config.replacement || '');
+              } else if (config.mode === 'regex_replace' && config.pattern) {
+                try {
+                  const rx = new RegExp(config.pattern, 'g');
+                  param.description = prevDesc.replace(rx, config.replacement || '');
+                } catch (err) {}
+              }
+              
+              isModified = true;
+              logs.push({
+                actionTaken: 'param_desc_rewritten',
+                originalToolName: tool.name,
+                targetParam: rule.targetParam,
+                groupId: group.id,
+                groupName: group.name,
+                ruleId: rule.id,
+                ruleName: rule.name
+              });
+            }
+          }
+
+          if (rule.actionType === 'rename_param' && rule.targetParam && rule.renameTo) {
+            if (currentTool.inputSchema && currentTool.inputSchema.properties && currentTool.inputSchema.properties[rule.targetParam]) {
+              if (!currentTool.__schemaCloned) {
+                currentTool.inputSchema = JSON.parse(JSON.stringify(currentTool.inputSchema));
+                currentTool.__schemaCloned = true;
+              }
+              const schema = currentTool.inputSchema;
+              schema.properties[rule.renameTo] = schema.properties[rule.targetParam];
+              delete schema.properties[rule.targetParam];
+              
+              if (Array.isArray(schema.required)) {
+                const idx = schema.required.indexOf(rule.targetParam);
+                if (idx !== -1) {
+                  schema.required[idx] = rule.renameTo;
+                }
+              }
+              
+              const originalExecute = currentTool.execute || currentTool.handler || currentTool.call;
+              if (typeof originalExecute === 'function') {
+                const originalParam = rule.targetParam;
+                const newParam = rule.renameTo;
+                const wrappedExecute = async function(args) {
+                  let callArgs = args;
+                  if (args && typeof args === 'object' && args[newParam] !== undefined) {
+                    callArgs = Object.assign({}, args);
+                    callArgs[originalParam] = callArgs[newParam];
+                    delete callArgs[newParam];
+                  }
+                  const restArgs = Array.prototype.slice.call(arguments, 1);
+                  return originalExecute.apply(this, [callArgs, ...restArgs]);
+                };
+                if (currentTool.execute) currentTool.execute = wrappedExecute;
+                if (currentTool.handler) currentTool.handler = wrappedExecute;
+                if (currentTool.call) currentTool.call = wrappedExecute;
+              }
+              
+              isModified = true;
+              logs.push({
+                actionTaken: 'param_renamed',
+                originalToolName: tool.name,
+                targetParam: rule.targetParam,
+                renameTo: rule.renameTo,
+                groupId: group.id,
+                groupName: group.name,
+                ruleId: rule.id,
+                ruleName: rule.name
+              });
+            }
+          }
         }
       }
     }
@@ -338,6 +425,7 @@
 
     const existingTools = Array.from(registeredToolsMap.values());
     registeredToolsMap.clear();
+          toolAliases.clear();
 
     existingTools.forEach(tool => {
       if (tool.__isInjected) {
@@ -476,6 +564,11 @@
     }
 
     registeredToolsMap.set(evalResult.tool.name, evalResult.tool);
+    
+    if (normalized.name && normalized.name !== evalResult.tool.name) {
+      toolAliases.set(normalized.name, evalResult.tool);
+    }
+    
     notifyToolChangeEvent();
     return evalResult.tool;
   }
@@ -533,7 +626,7 @@
         if (prop === 'executeTool') {
           return async function (toolObj, inputArgs) {
             const toolName = typeof toolObj === 'string' ? toolObj : (toolObj && toolObj.name);
-            const tool = registeredToolsMap.get(toolName);
+            const tool = registeredToolsMap.get(toolName) || toolAliases.get(toolName);
             if (tool) {
               const fn = tool.execute || tool.handler || tool.call;
               if (typeof fn === 'function') {
@@ -560,6 +653,7 @@
         if (prop === 'tools' && Array.isArray(value)) {
           const injectedTools = Array.from(registeredToolsMap.values()).filter(t => t.__isInjected);
           registeredToolsMap.clear();
+          toolAliases.clear();
           injectedTools.forEach(t => registeredToolsMap.set(t.name, t));
 
           value.forEach(t => registerSingleTool(t));
