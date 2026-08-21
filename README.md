@@ -1,6 +1,6 @@
-# WebMCP Tool Override Chrome Extension
+# WebMCP Tool Override Browser Extension
 
-A Chrome Extension (Manifest V3) designed to intercept, override, block, rename, rewrite descriptions, or inject new tool definitions into WebMCP (Web Model Context Protocol) JS interfaces across any web origin prior to or during page load.
+A browser extension (Manifest V3) for Chromium-based browsers designed to intercept, override, block, rename, rewrite descriptions, or inject new tool definitions into WebMCP (Web Model Context Protocol) JS interfaces across any web origin prior to or during page load.
 
 ![Dashboard Screenshot Placeholder](./docs/images/dashboard.png)
 
@@ -25,31 +25,32 @@ WebMCP enables websites to expose tools and client context to AI models/agents v
 ### For Users (Developer Mode)
 
 1. Clone or download this repository.
-2. Open Chrome and navigate to `chrome://extensions/`.
-3. Enable **Developer mode** in the top right corner.
+2. Open your Chromium-based browser (Chrome, Edge, Brave, etc.) and navigate to its extensions page (e.g., `chrome://extensions/` or `edge://extensions/`).
+3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the extension directory (where `manifest.json` is located).
 
 ### For Automation
 
 Load the extension dynamically when launching your browser instance:
 
-ChriomeDriver example:
+WebDriver example:
 ```python
-# ChromeDriver (Selenium Python) example
+# WebDriver (Selenium Python) example for Chromium browsers
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-chrome_options = Options()
-chrome_options.add_argument("--load-extension=/path/to/extension")
+options = Options()
+options.add_argument("--load-extension=/path/to/extension")
 
-driver = webdriver.Chrome(options=chrome_options)
+# Use webdriver.Chrome or webdriver.Edge as appropriate
+driver = webdriver.Chrome(options=options)
 ```
 
-Regular headful Chrome example:
+Regular headful browser example:
 ```bash
-# Regular Chrome command line
+# Regular Chromium browser command line
 google-chrome --load-extension=/path/to/extension
-# (On Mac, use: /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --load-extension=/path/to/extension)
+# (Depending on your OS and browser, use the correct executable path, e.g., msedge, brave)
 ```
 
 Puppeteer example:
@@ -165,7 +166,7 @@ Pass rules directly in the URL via a base64 encoded JSON string (useful for quic
 
 ### 4. CDP Storage Pre-Seeding
 
-You can use the Chrome DevTools Protocol to directly inject the JSON into `chrome.storage.local` before navigating to the target page.
+You can use the Chrome DevTools Protocol (CDP) to directly inject the JSON into `chrome.storage.local` before navigating to the target page.
 
 ### 5. Local Dev Server Polling
 
