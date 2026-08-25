@@ -59,6 +59,8 @@ def driver():
     chrome_options.add_argument(f"--load-extension={extension_path}")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    if os.environ.get('CI'):
+        chrome_options.add_argument("--headless=new")
     
     driver = webdriver.Chrome(options=chrome_options)
     
