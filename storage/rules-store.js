@@ -69,9 +69,10 @@ export function normalizeRule(rule) {
     id: rule.id || generateUUID(),
     name: rule.name || `${rule.actionType.toUpperCase()} rule`,
     disabled: Boolean(rule.disabled), // Default false (active)
-    actionType: ['block', 'rename', 'rewrite', 'inject'].includes(rule.actionType) ? rule.actionType : 'block',
+    actionType: ['block', 'rename', 'rewrite', 'rename_param', 'rewrite_param_desc', 'inject'].includes(rule.actionType) ? rule.actionType : 'block',
     targetToolName: rule.targetToolName || '*',
     isRegexPattern: Boolean(rule.isRegexPattern),
+    targetParam: rule.targetParam || '',
     renameTo: rule.renameTo || '',
     rewriteConfig: rule.rewriteConfig || { mode: 'static', replacement: '' },
     injectedTool: rule.injectedTool || {

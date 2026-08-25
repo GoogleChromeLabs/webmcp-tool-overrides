@@ -178,6 +178,8 @@
           <option value="block">🛑 BLOCK Tool</option>
           <option value="rename">✏️ RENAME Tool</option>
           <option value="rewrite">📝 REWRITE Tool Description</option>
+          <option value="rename_param">🏷️ RENAME Parameter</option>
+          <option value="rewrite_param_desc">🔤 REWRITE Parameter Description</option>
           <option value="inject">⚡ INJECT Synthetic Tool</option>
         </select>
       </div>
@@ -199,6 +201,22 @@
         <div class="form-group">
           <label class="form-label">Rename Tool To</label>
           <input type="text" class="form-input" id="ruleRenameToInput" placeholder="e.g. query_inventory">
+        </div>
+      </div>
+
+      <!-- Target Parameter Field -->
+      <div id="targetParamField" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">Target Parameter Name</label>
+          <input type="text" class="form-input" id="ruleTargetParamInput" placeholder="e.g. keyword">
+        </div>
+      </div>
+
+      <!-- Rename Parameter To Field -->
+      <div id="renameParamToField" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">Rename Parameter To</label>
+          <input type="text" class="form-input" id="ruleRenameParamToInput" placeholder="e.g. product_name">
         </div>
       </div>
 

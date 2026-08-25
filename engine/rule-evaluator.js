@@ -23,7 +23,7 @@ import { matchOrigin, matchToolName } from '../utils/pattern-matcher.js';
 
 /**
  * Evaluates a proposed tool registration against active origin groups.
- * 
+ *
  * @param {Object} tool - Proposed tool definition: { name, description, parameters, inputSchema, execute }
  * @param {Array} originGroups - List of OriginRuleGroup objects
  * @param {string} currentOrigin - Current page origin (e.g. window.location.origin)
@@ -38,20 +38,20 @@ export function evaluateToolRegistration(tool, originGroups, currentOrigin) {
   let currentTool = {
     ...tool,
     name: String(tool.name),
-    description: tool.description ? String(tool.description) : ''
+    description: tool.description ? String(tool.description) : '',
   };
 
   const logs = [];
   let isModified = false;
 
   // Filter matching active origin groups
-  const matchingGroups = (originGroups || []).filter(group => {
+  const matchingGroups = (originGroups || []).filter((group) => {
     if (group.disabled) return false;
     return matchOrigin(currentOrigin, group.originPattern);
   });
 
   for (const group of matchingGroups) {
-    const activeRules = (group.rules || []).filter(r => !r.disabled);
+    const activeRules = (group.rules || []).filter((r) => !r.disabled);
 
     for (const rule of activeRules) {
       if (rule.actionType === 'inject') continue; // Handled during initial document_start injection
@@ -65,7 +65,7 @@ export function evaluateToolRegistration(tool, originGroups, currentOrigin) {
             groupId: group.id,
             groupName: group.name,
             ruleId: rule.id,
-            ruleName: rule.name
+            ruleName: rule.name,
           });
           return { action: 'blocked', tool: null, logs };
         }
@@ -81,7 +81,7 @@ export function evaluateToolRegistration(tool, originGroups, currentOrigin) {
             groupId: group.id,
             groupName: group.name,
             ruleId: rule.id,
-            ruleName: rule.name
+            ruleName: rule.name,
           });
         }
 
@@ -98,7 +98,10 @@ export function evaluateToolRegistration(tool, originGroups, currentOrigin) {
           } else if (config.mode === 'regex_replace' && config.pattern) {
             try {
               const rx = new RegExp(config.pattern, 'g');
-              currentTool.description = currentTool.description.replace(rx, config.replacement || '');
+              currentTool.description = currentTool.description.replace(
+                rx,
+                config.replacement || '',
+              );
             } catch (err) {
               console.warn('[WebMCP Engine] Regex replace error:', err);
             }
@@ -113,8 +116,104 @@ export function evaluateToolRegistration(tool, originGroups, currentOrigin) {
             groupId: group.id,
             groupName: group.name,
             ruleId: rule.id,
-            ruleName: rule.name
+            ruleName: rule.name,
           });
+        }
+
+        if (rule.actionType === 'rewrite_param_desc' && rule.targetParam && rule.rewriteConfig) {
+          if (
+            currentTool.inputSchema &&
+            currentTool.inputSchema.properties &&
+            currentTool.inputSchema.properties[rule.targetParam]
+          ) {
+            if (!currentTool.__schemaCloned) {
+              currentTool.inputSchema = JSON.parse(JSON.stringify(currentTool.inputSchema));
+              currentTool.__schemaCloned = true;
+            }
+            const param = currentTool.inputSchema.properties[rule.targetParam];
+            const prevDesc = param.description || '';
+            const config = rule.rewriteConfig;
+
+            if (config.mode === 'static') {
+              param.description = config.replacement || '';
+            } else if (config.mode === 'prepend') {
+              param.description = (config.replacement || '') + prevDesc;
+            } else if (config.mode === 'append') {
+              param.description = prevDesc + (config.replacement || '');
+            } else if (config.mode === 'regex_replace' && config.pattern) {
+              try {
+                const rx = new RegExp(config.pattern, 'g');
+                param.description = prevDesc.replace(rx, config.replacement || '');
+              } catch {
+                /* ignore */
+              }
+            }
+
+            isModified = true;
+            logs.push({
+              actionTaken: 'param_desc_rewritten',
+              originalToolName: tool.name,
+              targetParam: rule.targetParam,
+              groupId: group.id,
+              groupName: group.name,
+              ruleId: rule.id,
+              ruleName: rule.name,
+            });
+          }
+        }
+
+        if (rule.actionType === 'rename_param' && rule.targetParam && rule.renameTo) {
+          if (
+            currentTool.inputSchema &&
+            currentTool.inputSchema.properties &&
+            currentTool.inputSchema.properties[rule.targetParam]
+          ) {
+            if (!currentTool.__schemaCloned) {
+              currentTool.inputSchema = JSON.parse(JSON.stringify(currentTool.inputSchema));
+              currentTool.__schemaCloned = true;
+            }
+            const schema = currentTool.inputSchema;
+            schema.properties[rule.renameTo] = schema.properties[rule.targetParam];
+            delete schema.properties[rule.targetParam];
+
+            if (Array.isArray(schema.required)) {
+              const idx = schema.required.indexOf(rule.targetParam);
+              if (idx !== -1) {
+                schema.required[idx] = rule.renameTo;
+              }
+            }
+
+            const originalExecute = currentTool.execute || currentTool.handler || currentTool.call;
+            if (typeof originalExecute === 'function') {
+              const originalParam = rule.targetParam;
+              const newParam = rule.renameTo;
+              const wrappedExecute = async function (args) {
+                let callArgs = args;
+                if (args && typeof args === 'object' && args[newParam] !== undefined) {
+                  callArgs = Object.assign({}, args);
+                  callArgs[originalParam] = callArgs[newParam];
+                  delete callArgs[newParam];
+                }
+                const restArgs = Array.prototype.slice.call(arguments, 1);
+                return originalExecute.apply(this, [callArgs, ...restArgs]);
+              };
+              if (currentTool.execute) currentTool.execute = wrappedExecute;
+              if (currentTool.handler) currentTool.handler = wrappedExecute;
+              if (currentTool.call) currentTool.call = wrappedExecute;
+            }
+
+            isModified = true;
+            logs.push({
+              actionTaken: 'param_renamed',
+              originalToolName: tool.name,
+              targetParam: rule.targetParam,
+              renameTo: rule.renameTo,
+              groupId: group.id,
+              groupName: group.name,
+              ruleId: rule.id,
+              ruleName: rule.name,
+            });
+          }
         }
       }
     }
@@ -123,27 +222,27 @@ export function evaluateToolRegistration(tool, originGroups, currentOrigin) {
   return {
     action: isModified ? 'modified' : 'allow',
     tool: currentTool,
-    logs
+    logs,
   };
 }
 
 /**
  * Compiles and returns all Injected synthetic tools for the current origin.
- * 
- * @param {Array} originGroups 
- * @param {string} currentOrigin 
+ *
+ * @param {Array} originGroups
+ * @param {string} currentOrigin
  * @returns {Array} Array of synthesized tool objects with bound execute handlers.
  */
 export function getInjectedToolsForOrigin(originGroups, currentOrigin) {
   const injectedTools = [];
 
-  const matchingGroups = (originGroups || []).filter(group => {
+  const matchingGroups = (originGroups || []).filter((group) => {
     if (group.disabled) return false;
     return matchOrigin(currentOrigin, group.originPattern);
   });
 
   for (const group of matchingGroups) {
-    const activeRules = (group.rules || []).filter(r => !r.disabled && r.actionType === 'inject');
+    const activeRules = (group.rules || []).filter((r) => !r.disabled && r.actionType === 'inject');
 
     for (const rule of activeRules) {
       if (!rule.injectedTool || !rule.injectedTool.name) continue;
@@ -158,14 +257,19 @@ export function getInjectedToolsForOrigin(originGroups, currentOrigin) {
           if (typeof compiled === 'function') {
             executeFn = compiled;
           } else {
-            executeFn = async (args) => compiled;
+            executeFn = async (_args) => compiled;
           }
         } catch (e) {
-          console.error(`[WebMCP Engine] Error compiling script for injected tool '${def.name}':`, e);
-          executeFn = async (args) => ({ error: `Compilation error in injected tool ${def.name}` });
+          console.error(
+            `[WebMCP Engine] Error compiling script for injected tool '${def.name}':`,
+            e,
+          );
+          executeFn = async (_args) => ({
+            error: `Compilation error in injected tool ${def.name}`,
+          });
         }
       } else {
-        executeFn = async (args) => def.mockResponse || { status: 'ok', tool: def.name };
+        executeFn = async (_args) => def.mockResponse || { status: 'ok', tool: def.name };
       }
 
       injectedTools.push({
@@ -176,7 +280,7 @@ export function getInjectedToolsForOrigin(originGroups, currentOrigin) {
         execute: executeFn,
         __isInjectedByExtension: true,
         groupId: group.id,
-        ruleId: rule.id
+        ruleId: rule.id,
       });
     }
   }

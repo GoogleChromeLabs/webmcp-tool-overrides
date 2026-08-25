@@ -27,7 +27,7 @@ import {
   clearAuditLogs,
   generateUUID,
   normalizeOriginGroup,
-  normalizeRule
+  normalizeRule,
 } from '../storage/rules-store.js';
 
 import { evaluateToolRegistration, getInjectedToolsForOrigin } from '../engine/rule-evaluator.js';
@@ -61,6 +61,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ruleTargetToolInput = document.getElementById('ruleTargetToolInput');
   const ruleIsRegexInput = document.getElementById('ruleIsRegexInput');
   const ruleRenameToInput = document.getElementById('ruleRenameToInput');
+  const ruleTargetParamInput = document.getElementById('ruleTargetParamInput');
+  const ruleRenameParamToInput = document.getElementById('ruleRenameParamToInput');
   const ruleRewriteModeInput = document.getElementById('ruleRewriteModeInput');
   const ruleRewriteReplacementInput = document.getElementById('ruleRewriteReplacementInput');
   const ruleInjectNameInput = document.getElementById('ruleInjectNameInput');
@@ -74,6 +76,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const standardRuleFields = document.getElementById('standardRuleFields');
   const renameFields = document.getElementById('renameFields');
   const rewriteFields = document.getElementById('rewriteFields');
+  const targetParamField = document.getElementById('targetParamField');
+  const renameParamToField = document.getElementById('renameParamToField');
   const injectFields = document.getElementById('injectFields');
 
   // Simulator & Logs Elements
@@ -93,10 +97,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 
   // --- Tab Switcher ---
-  tabBtns.forEach(btn => {
+  tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
-      tabBtns.forEach(b => b.classList.remove('active'));
-      tabContents.forEach(c => c.classList.remove('active'));
+      tabBtns.forEach((b) => b.classList.remove('active'));
+      tabContents.forEach((c) => c.classList.remove('active'));
 
       btn.classList.add('active');
       const targetTab = document.getElementById(btn.dataset.tab);
@@ -116,12 +120,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const empty = document.createElement('div');
       empty.className = 'origin-card';
       empty.style.textAlign = 'center';
-      empty.textContent = 'No Origin Rule Groups configured yet. Click "New Origin Group" to create one.';
+      empty.textContent =
+        'No Origin Rule Groups configured yet. Click "New Origin Group" to create one.';
       originGroupsList.appendChild(empty);
       return;
     }
 
-    originGroups.forEach(group => {
+    originGroups.forEach((group) => {
       const card = document.createElement('div');
       card.className = `origin-card ${group.disabled ? 'disabled-group' : ''}`;
 
@@ -176,7 +181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       deleteGroupBtn.textContent = '🗑️ Delete';
       deleteGroupBtn.addEventListener('click', async () => {
         if (confirm(`Delete origin group "${group.name}"?`)) {
-          originGroups = originGroups.filter(g => g.id !== group.id);
+          originGroups = originGroups.filter((g) => g.id !== group.id);
           await saveOriginGroups(originGroups);
           renderOriginGroups();
         }
@@ -203,7 +208,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         noRules.textContent = 'No rules inside this origin group. Click "Add Rule" to add one.';
         rulesContainer.appendChild(noRules);
       } else {
-        group.rules.forEach(rule => {
+        group.rules.forEach((rule) => {
           const ruleRow = document.createElement('div');
           ruleRow.className = `rule-row ${rule.disabled ? 'disabled-rule' : ''}`;
 
@@ -226,6 +231,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           } else if (rule.actionType === 'rename') {
             target.textContent = `RENAME: ${rule.targetToolName} ➔ ${rule.renameTo}`;
             desc.textContent = rule.name || 'Rename rule';
+          } else if (rule.actionType === 'rename_param') {
+            target.textContent = `RENAME PARAM (${rule.targetToolName}): ${rule.targetParam} ➔ ${rule.renameTo}`;
+            desc.textContent = rule.name || 'Rename parameter';
+          } else if (rule.actionType === 'rewrite_param_desc') {
+            target.textContent = `REWRITE PARAM DESC (${rule.targetToolName}): ${rule.targetParam}`;
+            desc.textContent = `Mode: ${rule.rewriteConfig ? rule.rewriteConfig.mode : 'static'}`;
           } else if (rule.actionType === 'rewrite') {
             target.textContent = `REWRITE: ${rule.targetToolName}`;
             desc.textContent = `Mode: ${rule.rewriteConfig ? rule.rewriteConfig.mode : 'static'} | Replacement: "${rule.rewriteConfig ? rule.rewriteConfig.replacement : ''}"`;
@@ -267,7 +278,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           deleteRuleBtn.className = 'btn btn-sm btn-danger';
           deleteRuleBtn.textContent = '✕';
           deleteRuleBtn.addEventListener('click', async () => {
-            group.rules = group.rules.filter(r => r.id !== rule.id);
+            group.rules = group.rules.filter((r) => r.id !== rule.id);
             await saveOriginGroups(originGroups);
             renderOriginGroups();
           });
@@ -293,7 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function openGroupModal(groupId = null) {
     currentEditingGroupId = groupId;
     if (groupId) {
-      const g = originGroups.find(x => x.id === groupId);
+      const g = originGroups.find((x) => x.id === groupId);
       if (g) {
         groupModalTitle.textContent = 'Edit Origin Group';
         groupNameInput.value = g.name;
@@ -316,7 +327,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const originPattern = groupOriginInput.value.trim() || '*://*/*';
 
     if (currentEditingGroupId) {
-      const g = originGroups.find(x => x.id === currentEditingGroupId);
+      const g = originGroups.find((x) => x.id === currentEditingGroupId);
       if (g) {
         g.name = name;
         g.originPattern = originPattern;
@@ -328,7 +339,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         name,
         originPattern,
         disabled: false,
-        rules: []
+        rules: [],
       });
       originGroups.push(newGroup);
     }
@@ -347,7 +358,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const actionType = ruleActionTypeInput.value;
     standardRuleFields.style.display = actionType === 'inject' ? 'none' : 'block';
     renameFields.style.display = actionType === 'rename' ? 'block' : 'none';
-    rewriteFields.style.display = actionType === 'rewrite' ? 'block' : 'none';
+    rewriteFields.style.display =
+      actionType === 'rewrite' || actionType === 'rewrite_param_desc' ? 'block' : 'none';
+    targetParamField.style.display =
+      actionType === 'rename_param' || actionType === 'rewrite_param_desc' ? 'block' : 'none';
+    renameParamToField.style.display = actionType === 'rename_param' ? 'block' : 'none';
     injectFields.style.display = actionType === 'inject' ? 'block' : 'none';
   }
 
@@ -357,22 +372,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentEditingGroupId = groupId;
     currentEditingRuleId = ruleId;
 
-    const group = originGroups.find(g => g.id === groupId);
+    const group = originGroups.find((g) => g.id === groupId);
     if (!group) return;
 
     if (ruleId) {
-      const r = group.rules.find(x => x.id === ruleId);
+      const r = group.rules.find((x) => x.id === ruleId);
       if (r) {
         ruleModalTitle.textContent = 'Edit Rule';
         ruleActionTypeInput.value = r.actionType;
         ruleTargetToolInput.value = r.targetToolName || '';
         ruleIsRegexInput.checked = Boolean(r.isRegexPattern);
         ruleRenameToInput.value = r.renameTo || '';
+        ruleTargetParamInput.value = r.targetParam || '';
+        ruleRenameParamToInput.value = r.renameTo || '';
         ruleRewriteModeInput.value = r.rewriteConfig ? r.rewriteConfig.mode : 'static';
         ruleRewriteReplacementInput.value = r.rewriteConfig ? r.rewriteConfig.replacement : '';
         ruleInjectNameInput.value = r.injectedTool ? r.injectedTool.name : '';
         ruleInjectDescInput.value = r.injectedTool ? r.injectedTool.description : '';
-        ruleInjectHandlerTypeInput.value = r.injectedTool ? r.injectedTool.handlerType : 'js_script';
+        ruleInjectHandlerTypeInput.value = r.injectedTool
+          ? r.injectedTool.handlerType
+          : 'js_script';
         ruleInjectScriptInput.value = r.injectedTool ? r.injectedTool.customScript : '';
       }
     } else {
@@ -381,6 +400,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       ruleTargetToolInput.value = '';
       ruleIsRegexInput.checked = false;
       ruleRenameToInput.value = '';
+      ruleTargetParamInput.value = '';
+      ruleRenameParamToInput.value = '';
       ruleRewriteModeInput.value = 'static';
       ruleRewriteReplacementInput.value = '';
       ruleInjectNameInput.value = 'synthetic_tool';
@@ -398,7 +419,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   saveRuleModalBtn.addEventListener('click', async () => {
-    const group = originGroups.find(g => g.id === currentEditingGroupId);
+    const group = originGroups.find((g) => g.id === currentEditingGroupId);
     if (!group) return;
 
     const actionType = ruleActionTypeInput.value;
@@ -407,23 +428,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       actionType,
       targetToolName: ruleTargetToolInput.value.trim() || '*',
       isRegexPattern: ruleIsRegexInput.checked,
-      renameTo: ruleRenameToInput.value.trim(),
+      renameTo:
+        actionType === 'rename_param'
+          ? ruleRenameParamToInput.value.trim()
+          : ruleRenameToInput.value.trim(),
+      targetParam: ruleTargetParamInput.value.trim(),
       rewriteConfig: {
         mode: ruleRewriteModeInput.value,
-        replacement: ruleRewriteReplacementInput.value
+        replacement: ruleRewriteReplacementInput.value,
       },
       injectedTool: {
         name: ruleInjectNameInput.value.trim() || 'synthetic_tool',
         description: ruleInjectDescInput.value.trim(),
         inputSchema: { type: 'object' },
         handlerType: ruleInjectHandlerTypeInput.value,
-        customScript: ruleInjectScriptInput.value
+        customScript: ruleInjectScriptInput.value,
       },
-      disabled: false
+      disabled: false,
     });
 
     if (currentEditingRuleId) {
-      const idx = group.rules.findIndex(r => r.id === currentEditingRuleId);
+      const idx = group.rules.findIndex((r) => r.id === currentEditingRuleId);
       if (idx !== -1) group.rules[idx] = ruleObj;
     } else {
       group.rules.push(ruleObj);
@@ -467,7 +492,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           alert('Invalid JSON format: Expected array of origin groups.');
         }
-      } catch (err) {
+      } catch {
         alert('Failed to parse JSON file.');
       }
     };
@@ -502,7 +527,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (injected.length > 0) {
       outputText += `\n--- SYNTHETIC INJECTED TOOLS FOR THIS ORIGIN ---\n`;
-      const injectedSummary = injected.map(t => ({ name: t.name, description: t.description }));
+      const injectedSummary = injected.map((t) => ({ name: t.name, description: t.description }));
       outputText += JSON.stringify(injectedSummary, null, 2);
     }
 
@@ -518,7 +543,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     let text = `Total Log Entries: ${logs.length}\n\n`;
-    logs.forEach(log => {
+    logs.forEach((log) => {
       const date = new Date(log.timestamp).toLocaleTimeString();
       text += `[${date}] [${log.origin}] ${log.actionTaken.toUpperCase()}: ${log.originalToolName}`;
       if (log.finalToolName) text += ` ➔ ${log.finalToolName}`;
@@ -537,13 +562,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const initialSettings = await getSettings();
   settingLogInterceptions.checked = Boolean(initialSettings.logInterceptions);
   settingAutomationServer.checked = Boolean(initialSettings.automationServerEnabled);
-  settingAutomationUrl.value = initialSettings.automationServerUrl || 'http://127.0.0.1:8999/webmcp-rules.json';
+  settingAutomationUrl.value =
+    initialSettings.automationServerUrl || 'http://127.0.0.1:8999/webmcp-rules.json';
 
   saveSettingsBtn.addEventListener('click', async () => {
     await saveSettings({
       logInterceptions: settingLogInterceptions.checked,
       automationServerEnabled: settingAutomationServer.checked,
-      automationServerUrl: settingAutomationUrl.value.trim()
+      automationServerUrl: settingAutomationUrl.value.trim(),
     });
     alert('Settings saved successfully!');
   });
