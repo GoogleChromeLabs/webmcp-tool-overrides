@@ -15,6 +15,7 @@
 import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 import os
 import json
 import threading
@@ -62,7 +63,8 @@ def driver():
     if os.environ.get('CI'):
         chrome_options.add_argument("--headless=new")
     
-    driver = webdriver.Chrome(options=chrome_options)
+    service = Service(service_args=['--verbose'], log_output='chromedriver.log')
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     
     time.sleep(2)
     

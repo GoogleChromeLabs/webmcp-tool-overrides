@@ -40,3 +40,8 @@ jobs:
     - name: Run Pytest
       run: |
         pytest tests/
+        
+    - name: Dump ChromeDriver logs
+      if: failure()
+      run: |
+        if [ -f chromedriver.log ]; then cat chromedriver.log; else echo "chromedriver.log not found"; fi
