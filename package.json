@@ -1,0 +1,44 @@
+{
+  "name": "override-extn",
+  "version": "1.0.0",
+  "description": "A browser extension (Manifest V3) for Chromium-based browsers designed to intercept, override, block, rename, rewrite descriptions, or inject new tool definitions into WebMCP (Web Model Context Protocol) JS interfaces across any web origin prior to or during page load.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GoogleChromeLabs/webmcp-tool-overrides.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/GoogleChromeLabs/webmcp-tool-overrides/issues"
+  },
+  "homepage": "https://github.com/GoogleChromeLabs/webmcp-tool-overrides#readme",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.9.6"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,html,css}": [
+      "prettier --write"
+    ]
+  }
+}

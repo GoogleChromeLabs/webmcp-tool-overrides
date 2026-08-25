@@ -1,0 +1,22 @@
+# Dependency directories
+node_modules/
+venv/
+env/
+.env
+
+# MacOS
+.DS_Store
+
+# Logs
+*.log
+chromedriver.log
+
+# Build / IDE
+dist/
+build/
+.idea/
+.vscode/
+
+# Testing
+.pytest_cache/
+__pycache__/
