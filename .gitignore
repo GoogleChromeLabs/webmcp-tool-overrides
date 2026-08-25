@@ -20,3 +20,6 @@ build/
 # Testing
 .pytest_cache/
 __pycache__/
+
+# Release artifacts
+*.zip
