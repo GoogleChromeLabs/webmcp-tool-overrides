@@ -39,8 +39,10 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         
     - name: Build extension zip
+      env:
+        VERSION: ${{ steps.get_version.outputs.version }}
       run: |
-        zip -r webmcp-tool-overrides-${{ steps.get_version.outputs.version }}.zip manifest.json background content dashboard engine icons popup storage utils LICENSE README.md
+        zip -r "webmcp-tool-overrides-${VERSION}.zip" manifest.json background content dashboard engine icons popup storage utils LICENSE README.md
         
     - name: Upload Release Asset
       uses: softprops/action-gh-release@c95d119777ca226d97c3905f1df7ef984501a4db # v2.1.0
