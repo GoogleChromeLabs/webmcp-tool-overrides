@@ -52,18 +52,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tab && tab.url && tab.url.startsWith('http')) {
       currentUrl = tab.url;
     }
-  } catch (e) {}
+  } catch {
+    /* ignore */
+  }
 
   try {
     const u = new URL(currentUrl);
     currentOriginText.textContent = u.hostname + u.pathname;
-  } catch (e) {
+  } catch {
     currentOriginText.textContent = currentUrl;
   }
 
   // Load Matching Origin Groups
   const groups = await getOriginGroups();
-  const activeMatchingGroups = groups.filter(g => !g.disabled && matchOrigin(currentUrl, g.originPattern));
+  const activeMatchingGroups = groups.filter(
+    (g) => !g.disabled && matchOrigin(currentUrl, g.originPattern),
+  );
 
   // Render UI safely using textContent / DOM methods
   groupsContainer.replaceChildren();
@@ -74,7 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     emptyState.textContent = 'No active override rules matching this origin.';
     groupsContainer.appendChild(emptyState);
   } else {
-    activeMatchingGroups.forEach(group => {
+    activeMatchingGroups.forEach((group) => {
       const card = document.createElement('div');
       card.className = 'group-card';
 
@@ -96,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pillList = document.createElement('div');
       pillList.className = 'rule-pill-list';
 
-      const rules = (group.rules || []).filter(r => !r.disabled);
+      const rules = (group.rules || []).filter((r) => !r.disabled);
       if (rules.length === 0) {
         const noRules = document.createElement('span');
         noRules.style.fontSize = '10px';
@@ -104,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         noRules.textContent = 'No active rules';
         pillList.appendChild(noRules);
       } else {
-        rules.forEach(rule => {
+        rules.forEach((rule) => {
           const pill = document.createElement('span');
           pill.className = `rule-pill ${rule.actionType}`;
           let label = `${rule.actionType.toUpperCase()}: `;
@@ -135,5 +139,4 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.open(chrome.runtime.getURL('dashboard/dashboard.html'));
     }
   });
-
 });

@@ -27,9 +27,7 @@ export function globToRegex(pattern) {
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
 
   // Replace glob wildcards '*' with '.*' and '?' with '.'
-  const regexString = escaped
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
+  const regexString = escaped.replace(/\*/g, '.*').replace(/\?/g, '.');
 
   return new RegExp(`^${regexString}$`, 'i');
 }
@@ -60,12 +58,8 @@ export function matchOrigin(targetUrl, pattern) {
     const urlObj = new URL(urlStr);
     const originRootStr = `${urlObj.protocol}//${urlObj.host}/`;
 
-    return (
-      regex.test(urlStr) ||
-      regex.test(`${urlStr}/`) ||
-      regex.test(originRootStr)
-    );
-  } catch (err) {
+    return regex.test(urlStr) || regex.test(`${urlStr}/`) || regex.test(originRootStr);
+  } catch {
     // Fallback direct glob test
     return globToRegex(pattern).test(targetUrl);
   }
@@ -80,7 +74,7 @@ export function matchToolName(toolName, targetPattern, isRegex = false) {
     try {
       const rx = new RegExp(targetPattern, 'i');
       return rx.test(toolName);
-    } catch (e) {
+    } catch {
       console.warn('[WebMCP Matcher] Invalid regex pattern:', targetPattern);
       return false;
     }

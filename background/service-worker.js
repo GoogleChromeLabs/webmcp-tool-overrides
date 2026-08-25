@@ -19,7 +19,12 @@
  * Handles storage sync, badge updates, audit logging, and local automation HTTP server polling.
  */
 
-import { getOriginGroups, getSettings, addAuditLog, saveOriginGroups } from '../storage/rules-store.js';
+import {
+  getOriginGroups,
+  getSettings,
+  addAuditLog,
+  saveOriginGroups,
+} from '../storage/rules-store.js';
 import { matchOrigin } from '../utils/pattern-matcher.js';
 
 // Map tabId -> count of intercepted events
@@ -34,12 +39,12 @@ function updateTabBadge(tabId, count) {
 
   chrome.action.setBadgeText({
     tabId,
-    text: String(currentCount)
+    text: String(currentCount),
   });
 
   chrome.action.setBadgeBackgroundColor({
     tabId,
-    color: '#8b5cf6' // Vibrant violet badge color
+    color: '#8b5cf6', // Vibrant violet badge color
   });
 }
 
@@ -68,8 +73,10 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
       sendResponse({ status: 'logged' });
     } else if (message.type === 'WEBMCP_GET_ACTIVE_GROUPS_FOR_ORIGIN') {
       const origin = message.origin;
-      getOriginGroups().then(groups => {
-        const activeForOrigin = groups.filter(g => !g.disabled && matchOrigin(origin, g.originPattern));
+      getOriginGroups().then((groups) => {
+        const activeForOrigin = groups.filter(
+          (g) => !g.disabled && matchOrigin(origin, g.originPattern),
+        );
         sendResponse({ groups: activeForOrigin });
       });
       return true; // Async response
@@ -79,8 +86,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 }
 
 // Optional Automation Server Polling (Runs if automationServerEnabled is true in settings)
-let pollingTimer = null;
-
 async function checkAutomationServer() {
   try {
     const settings = await getSettings();
@@ -93,15 +98,18 @@ async function checkAutomationServer() {
       const remoteOriginGroups = await response.json();
       if (Array.isArray(remoteOriginGroups)) {
         await saveOriginGroups(remoteOriginGroups);
-        console.log('[WebMCP Background] Origin groups synced from local server:', settings.automationServerUrl);
+        console.log(
+          '[WebMCP Background] Origin groups synced from local server:',
+          settings.automationServerUrl,
+        );
       }
     }
-  } catch (err) {
+  } catch {
     // Polling silent fallback when automation server is not running
   }
 }
 
 // Start 5-second polling interval for local automation HTTP server
 if (typeof setInterval !== 'undefined') {
-  pollingTimer = setInterval(checkAutomationServer, 5000);
+  setInterval(checkAutomationServer, 5000);
 }

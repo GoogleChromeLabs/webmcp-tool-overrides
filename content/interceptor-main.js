@@ -16,7 +16,7 @@
 
 /**
  * WebMCP MAIN World Interceptor (Runs at document_start in page context)
- * 
+ *
  * Replaces/wraps navigator.modelContext, document.modelContext, window.webmcp, navigator.clientTools, navigator.ai
  * Intercepts tool registration, block/rename/rewrite, and injects synthetic tools.
  */
@@ -45,7 +45,9 @@
         if (typeof q.target[q.prop] === 'function' && res !== false) {
           try {
             q.target[q.prop].apply(q.target, [res, q.args[1]]);
-          } catch (e) {}
+          } catch {
+            /* ignore */
+          }
         }
       } else if (q.type === 'prototype') {
         const res = registerSingleTool(q.args[0], q.args[1]);
@@ -72,7 +74,9 @@
           rulesLoaded = true;
         }
       }
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
   loadCachedRulesSynchronously();
 
@@ -87,7 +91,7 @@
         return {};
       }
       return hostObj[propName] || {};
-    } catch (e) {
+    } catch {
       return {};
     }
   }
@@ -98,9 +102,7 @@
       return /^.*$/;
     }
     let escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    let regexString = escaped
-      .replace(/\*/g, '.*')
-      .replace(/\?/g, '.');
+    let regexString = escaped.replace(/\*/g, '.*').replace(/\?/g, '.');
     return new RegExp(`^${regexString}$`, 'i');
   }
 
@@ -126,12 +128,8 @@
       const regex = globToRegex(normalizedPattern);
       const urlObj = new URL(urlStr);
       const originRootStr = `${urlObj.protocol}//${urlObj.host}/`;
-      return (
-        regex.test(urlStr) ||
-        regex.test(`${urlStr}/`) ||
-        regex.test(originRootStr)
-      );
-    } catch (e) {
+      return regex.test(urlStr) || regex.test(`${urlStr}/`) || regex.test(originRootStr);
+    } catch {
       return globToRegex(pattern).test(targetUrl);
     }
   }
@@ -142,7 +140,7 @@
     if (isRegex) {
       try {
         return new RegExp(targetPattern, 'i').test(toolName);
-      } catch (e) {
+      } catch {
         return false;
       }
     }
@@ -161,19 +159,19 @@
       ...tool,
       name: String(tool.name),
       description: tool.description ? String(tool.description) : '',
-      window: window
+      window: window,
     };
 
     const logs = [];
     let isModified = false;
 
-    const matchingGroups = (originGroups || []).filter(group => {
+    const matchingGroups = (originGroups || []).filter((group) => {
       if (group.disabled) return false;
       return matchOrigin(currentUrl, group.originPattern);
     });
 
     for (const group of matchingGroups) {
-      const activeRules = (group.rules || []).filter(r => !r.disabled);
+      const activeRules = (group.rules || []).filter((r) => !r.disabled);
 
       for (const rule of activeRules) {
         if (rule.actionType === 'inject') continue;
@@ -187,7 +185,7 @@
               groupId: group.id,
               groupName: group.name,
               ruleId: rule.id,
-              ruleName: rule.name
+              ruleName: rule.name,
             });
             return { action: 'blocked', tool: null, logs };
           }
@@ -203,7 +201,7 @@
               groupId: group.id,
               groupName: group.name,
               ruleId: rule.id,
-              ruleName: rule.name
+              ruleName: rule.name,
             });
           }
 
@@ -220,8 +218,13 @@
             } else if (config.mode === 'regex_replace' && config.pattern) {
               try {
                 const rx = new RegExp(config.pattern, 'g');
-                currentTool.description = currentTool.description.replace(rx, config.replacement || '');
-              } catch (e) {}
+                currentTool.description = currentTool.description.replace(
+                  rx,
+                  config.replacement || '',
+                );
+              } catch {
+                /* ignore */
+              }
             }
 
             isModified = true;
@@ -233,12 +236,16 @@
               groupId: group.id,
               groupName: group.name,
               ruleId: rule.id,
-              ruleName: rule.name
+              ruleName: rule.name,
             });
           }
 
           if (rule.actionType === 'rewrite_param_desc' && rule.targetParam && rule.rewriteConfig) {
-            if (currentTool.inputSchema && currentTool.inputSchema.properties && currentTool.inputSchema.properties[rule.targetParam]) {
+            if (
+              currentTool.inputSchema &&
+              currentTool.inputSchema.properties &&
+              currentTool.inputSchema.properties[rule.targetParam]
+            ) {
               if (!currentTool.__schemaCloned) {
                 currentTool.inputSchema = JSON.parse(JSON.stringify(currentTool.inputSchema));
                 currentTool.__schemaCloned = true;
@@ -246,7 +253,7 @@
               const param = currentTool.inputSchema.properties[rule.targetParam];
               const prevDesc = param.description || '';
               const config = rule.rewriteConfig;
-              
+
               if (config.mode === 'static') {
                 param.description = config.replacement || '';
               } else if (config.mode === 'prepend') {
@@ -257,9 +264,11 @@
                 try {
                   const rx = new RegExp(config.pattern, 'g');
                   param.description = prevDesc.replace(rx, config.replacement || '');
-                } catch (err) {}
+                } catch {
+                  /* ignore */
+                }
               }
-              
+
               isModified = true;
               logs.push({
                 actionTaken: 'param_desc_rewritten',
@@ -268,13 +277,17 @@
                 groupId: group.id,
                 groupName: group.name,
                 ruleId: rule.id,
-                ruleName: rule.name
+                ruleName: rule.name,
               });
             }
           }
 
           if (rule.actionType === 'rename_param' && rule.targetParam && rule.renameTo) {
-            if (currentTool.inputSchema && currentTool.inputSchema.properties && currentTool.inputSchema.properties[rule.targetParam]) {
+            if (
+              currentTool.inputSchema &&
+              currentTool.inputSchema.properties &&
+              currentTool.inputSchema.properties[rule.targetParam]
+            ) {
               if (!currentTool.__schemaCloned) {
                 currentTool.inputSchema = JSON.parse(JSON.stringify(currentTool.inputSchema));
                 currentTool.__schemaCloned = true;
@@ -282,19 +295,20 @@
               const schema = currentTool.inputSchema;
               schema.properties[rule.renameTo] = schema.properties[rule.targetParam];
               delete schema.properties[rule.targetParam];
-              
+
               if (Array.isArray(schema.required)) {
                 const idx = schema.required.indexOf(rule.targetParam);
                 if (idx !== -1) {
                   schema.required[idx] = rule.renameTo;
                 }
               }
-              
-              const originalExecute = currentTool.execute || currentTool.handler || currentTool.call;
+
+              const originalExecute =
+                currentTool.execute || currentTool.handler || currentTool.call;
               if (typeof originalExecute === 'function') {
                 const originalParam = rule.targetParam;
                 const newParam = rule.renameTo;
-                const wrappedExecute = async function(args) {
+                const wrappedExecute = async function (args) {
                   let callArgs = args;
                   if (args && typeof args === 'object' && args[newParam] !== undefined) {
                     callArgs = Object.assign({}, args);
@@ -308,7 +322,7 @@
                 if (currentTool.handler) currentTool.handler = wrappedExecute;
                 if (currentTool.call) currentTool.call = wrappedExecute;
               }
-              
+
               isModified = true;
               logs.push({
                 actionTaken: 'param_renamed',
@@ -318,7 +332,7 @@
                 groupId: group.id,
                 groupName: group.name,
                 ruleId: rule.id,
-                ruleName: rule.name
+                ruleName: rule.name,
               });
             }
           }
@@ -329,16 +343,20 @@
     return {
       action: isModified ? 'modified' : 'allow',
       tool: currentTool,
-      logs
+      logs,
     };
   }
 
   function getInjectedTools(originGroups, currentUrl) {
     const injected = [];
-    const matchingGroups = (originGroups || []).filter(g => !g.disabled && matchOrigin(currentUrl, g.originPattern));
+    const matchingGroups = (originGroups || []).filter(
+      (g) => !g.disabled && matchOrigin(currentUrl, g.originPattern),
+    );
 
     for (const group of matchingGroups) {
-      const activeRules = (group.rules || []).filter(r => !r.disabled && r.actionType === 'inject');
+      const activeRules = (group.rules || []).filter(
+        (r) => !r.disabled && r.actionType === 'inject',
+      );
 
       for (const rule of activeRules) {
         if (!rule.injectedTool || !rule.injectedTool.name) continue;
@@ -348,8 +366,8 @@
         if (def.handlerType === 'js_script' && def.customScript) {
           try {
             const compiled = new Function(`return (${def.customScript});`)();
-            executeFn = typeof compiled === 'function' ? compiled : async (args) => compiled;
-          } catch (e) {
+            executeFn = typeof compiled === 'function' ? compiled : async (_args) => compiled;
+          } catch {
             try {
               executeFn = new Function('args', `return (async () => { ${def.customScript} })();`);
             } catch (err) {
@@ -371,7 +389,7 @@
           window: window,
           __isInjected: true,
           groupId: group.id,
-          ruleId: rule.id
+          ruleId: rule.id,
         });
       }
     }
@@ -380,10 +398,12 @@
 
   function notifyAudit(logs) {
     if (!logs || !logs.length) return;
-    logs.forEach(log => {
-      window.dispatchEvent(new CustomEvent('__WEBMCP_AUDIT_LOG_EVENT__', {
-        detail: { ...log, origin: window.location.href }
-      }));
+    logs.forEach((log) => {
+      window.dispatchEvent(
+        new CustomEvent('__WEBMCP_AUDIT_LOG_EVENT__', {
+          detail: { ...log, origin: window.location.href },
+        }),
+      );
     });
   }
 
@@ -391,12 +411,16 @@
     if (typeof onToolChangeHandler === 'function') {
       try {
         onToolChangeHandler();
-      } catch (e) {}
+      } catch {
+        /* ignore */
+      }
     }
     try {
       window.dispatchEvent(new CustomEvent('toolchange'));
       window.dispatchEvent(new CustomEvent('webmcp:tools-changed'));
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
 
   // Normalize polymorphic tool arguments:
@@ -405,7 +429,7 @@
   // 3. registerTool([ tool1, tool2 ])
   function normalizeToolInput(arg1, arg2) {
     if (Array.isArray(arg1)) {
-      return arg1.map(item => normalizeToolInput(item)).filter(Boolean);
+      return arg1.map((item) => normalizeToolInput(item)).filter(Boolean);
     }
     if (typeof arg1 === 'string') {
       if (arg2 && typeof arg2 === 'object') {
@@ -425,9 +449,9 @@
 
     const existingTools = Array.from(registeredToolsMap.values());
     registeredToolsMap.clear();
-          toolAliases.clear();
+    toolAliases.clear();
 
-    existingTools.forEach(tool => {
+    existingTools.forEach((tool) => {
       if (tool.__isInjected) {
         registeredToolsMap.set(tool.name, tool);
         return;
@@ -448,7 +472,9 @@
     activeOriginGroups = newOriginGroups;
     try {
       sessionStorage.setItem('__WEBMCP_RULES_CACHE__', JSON.stringify(newOriginGroups));
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
 
     flushQueuedRegistrations();
     reEvaluateRegisteredTools();
@@ -469,7 +495,9 @@
           syncConfiguration(decoded);
         }
       }
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
 
   window.addEventListener('message', (event) => {
@@ -493,13 +521,13 @@
     const injected = getInjectedTools(activeOriginGroups, window.location.href);
     let addedCount = 0;
 
-    injected.forEach(tool => {
+    injected.forEach((tool) => {
       // 1. Prepare a clean standard tool for the native C++ bindings
       const cleanTool = {
         name: String(tool.name),
         description: String(tool.description || ''),
         inputSchema: tool.inputSchema || { type: 'object' },
-        execute: tool.execute || tool.handler || (async () => {})
+        execute: tool.execute || tool.handler || (async () => {}),
       };
 
       // 2. Forward to native registry for isolated world compatibility
@@ -507,11 +535,20 @@
         let nativeHost = null;
         if (document.modelContext && document.modelContext.__native_target__) {
           nativeHost = document.modelContext.__native_target__;
-        } else if (window.navigator && window.navigator.modelContext && window.navigator.modelContext.__native_target__) {
+        } else if (
+          window.navigator &&
+          window.navigator.modelContext &&
+          window.navigator.modelContext.__native_target__
+        ) {
           nativeHost = window.navigator.modelContext.__native_target__;
         }
 
-        if (nativeHost && window.ModelContext && window.ModelContext.prototype && typeof window.ModelContext.prototype.__origRegisterTool === 'function') {
+        if (
+          nativeHost &&
+          window.ModelContext &&
+          window.ModelContext.prototype &&
+          typeof window.ModelContext.prototype.__origRegisterTool === 'function'
+        ) {
           window.ModelContext.prototype.__origRegisterTool.call(nativeHost, cleanTool);
         } else if (nativeHost && typeof nativeHost.registerTool === 'function') {
           // If prototype orig method not exposed, call directly (may hit our proxy, but cleanTool is safe)
@@ -526,13 +563,15 @@
         registeredToolsMap.set(tool.name, tool);
         addedCount++;
 
-        notifyAudit([{
-          actionTaken: 'injected',
-          originalToolName: tool.name,
-          finalToolName: tool.name,
-          groupId: tool.groupId,
-          ruleId: tool.ruleId
-        }]);
+        notifyAudit([
+          {
+            actionTaken: 'injected',
+            originalToolName: tool.name,
+            finalToolName: tool.name,
+            groupId: tool.groupId,
+            ruleId: tool.ruleId,
+          },
+        ]);
       } else {
         registeredToolsMap.set(tool.name, tool);
       }
@@ -553,7 +592,7 @@
     if (!normalized) return false;
 
     if (Array.isArray(normalized)) {
-      return normalized.map(t => processAndRegisterTool(t)).filter(Boolean);
+      return normalized.map((t) => processAndRegisterTool(t)).filter(Boolean);
     }
 
     const evalResult = evaluateTool(normalized, activeOriginGroups, window.location.href);
@@ -564,11 +603,11 @@
     }
 
     registeredToolsMap.set(evalResult.tool.name, evalResult.tool);
-    
+
     if (normalized.name && normalized.name !== evalResult.tool.name) {
       toolAliases.set(normalized.name, evalResult.tool);
     }
-    
+
     notifyToolChangeEvent();
     return evalResult.tool;
   }
@@ -578,7 +617,7 @@
     if (!normalized) return false;
 
     if (Array.isArray(normalized)) {
-      return normalized.map(t => processAndRegisterTool(t)).filter(Boolean);
+      return normalized.map((t) => processAndRegisterTool(t)).filter(Boolean);
     }
 
     return processAndRegisterTool(normalized);
@@ -601,7 +640,9 @@
                 if (res !== false) {
                   return target[prop].apply(target, [res, args[1]]);
                 }
-              } catch (e) {}
+              } catch {
+                /* ignore */
+              }
             }
             return res;
           };
@@ -612,7 +653,9 @@
             if (typeof target[prop] === 'function') {
               try {
                 return target[prop].call(target, processed || []);
-              } catch (e) {}
+              } catch {
+                /* ignore */
+              }
             }
             return processed || [];
           };
@@ -625,7 +668,7 @@
         }
         if (prop === 'executeTool') {
           return async function (toolObj, inputArgs) {
-            const toolName = typeof toolObj === 'string' ? toolObj : (toolObj && toolObj.name);
+            const toolName = typeof toolObj === 'string' ? toolObj : toolObj && toolObj.name;
             const tool = registeredToolsMap.get(toolName) || toolAliases.get(toolName);
             if (tool) {
               const fn = tool.execute || tool.handler || tool.call;
@@ -651,17 +694,19 @@
           return true;
         }
         if (prop === 'tools' && Array.isArray(value)) {
-          const injectedTools = Array.from(registeredToolsMap.values()).filter(t => t.__isInjected);
+          const injectedTools = Array.from(registeredToolsMap.values()).filter(
+            (t) => t.__isInjected,
+          );
           registeredToolsMap.clear();
           toolAliases.clear();
-          injectedTools.forEach(t => registeredToolsMap.set(t.name, t));
+          injectedTools.forEach((t) => registeredToolsMap.set(t.name, t));
 
-          value.forEach(t => registerSingleTool(t));
+          value.forEach((t) => registerSingleTool(t));
           applyInjectedTools();
           return true;
         }
         return Reflect.set(target, prop, value, receiver);
-      }
+      },
     });
   }
 
@@ -683,12 +728,11 @@
           } else {
             currentVal = newVal;
           }
-          return true;
         },
         configurable: true,
-        enumerable: true
+        enumerable: true,
       });
-    } catch (e) {
+    } catch {
       hostObj[propName] = currentVal;
     }
   }
@@ -699,7 +743,7 @@
   bindGlobalPropertyTrap(window.navigator, 'clientTools');
   bindGlobalPropertyTrap(window, 'modelContext');
   bindGlobalPropertyTrap(window, 'webmcp');
-  
+
   if (window.Document && window.Document.prototype) {
     bindGlobalPropertyTrap(window.Document.prototype, 'modelContext');
   }
@@ -739,9 +783,11 @@
           return Array.from(registeredToolsMap.values());
         },
         configurable: true,
-        enumerable: true
+        enumerable: true,
       });
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
 
   // Intercept CustomEvent registrations
@@ -777,5 +823,4 @@
       flushQueuedRegistrations();
     }
   }, 500);
-
 })();
