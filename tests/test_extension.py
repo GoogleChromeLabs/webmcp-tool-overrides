@@ -568,3 +568,76 @@ def test_audit_logging(driver, mock_server):
     assert len(logs) >= 1
     assert logs[0]['actionTaken'] == 'blocked'
     assert logs[0]['originalToolName'] == 'logged_blocked_tool'
+
+def test_rename_param(driver, mock_server):
+    set_rules([
+        {
+            "actionType": "rename_param",
+            "targetToolName": "weather_api",
+            "targetParam": "city",
+            "renameTo": "location"
+        }
+    ])
+    
+    driver.get("data:text/html,<html><body><h1>Test Page</h1></body></html>")
+    
+    driver.execute_script("""
+        window.webmcp.registerTool({ 
+            name: 'weather_api', 
+            description: 'Get weather',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    city: { type: 'string', description: 'City name' },
+                    unit: { type: 'string' }
+                },
+                required: ['city']
+            }
+        });
+    """)
+    
+    tools = get_tools_from_page(driver)
+    weather_tool = next((t for t in tools if t['name'] == 'weather_api'), None)
+    
+    assert weather_tool is not None
+    assert 'city' not in weather_tool['inputSchema']['properties']
+    assert 'location' in weather_tool['inputSchema']['properties']
+    assert weather_tool['inputSchema']['properties']['location']['description'] == 'City name'
+    assert 'location' in weather_tool['inputSchema']['required']
+    assert 'city' not in weather_tool['inputSchema']['required']
+
+def test_rewrite_param_desc(driver, mock_server):
+    set_rules([
+        {
+            "actionType": "rewrite_param_desc",
+            "targetToolName": "weather_api",
+            "targetParam": "city",
+            "rewriteConfig": {
+                "mode": "append",
+                "replacement": " (e.g. London)"
+            }
+        }
+    ])
+    
+    driver.get("data:text/html,<html><body><h1>Test Page</h1></body></html>")
+    
+    driver.execute_script("""
+        window.webmcp.registerTool({ 
+            name: 'weather_api', 
+            description: 'Get weather',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    city: { type: 'string', description: 'City name' }
+                }
+            }
+        });
+    """)
+    
+    tools = get_tools_from_page(driver)
+    weather_tool = next((t for t in tools if t['name'] == 'weather_api'), None)
+    
+    assert weather_tool is not None
+    assert 'city' in weather_tool['inputSchema']['properties']
+    assert weather_tool['inputSchema']['properties']['city']['description'] == 'City name (e.g. London)'
+
