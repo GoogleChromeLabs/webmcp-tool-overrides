@@ -641,3 +641,45 @@ def test_rewrite_param_desc(driver, mock_server):
     assert 'city' in weather_tool['inputSchema']['properties']
     assert weather_tool['inputSchema']['properties']['city']['description'] == 'City name (e.g. London)'
 
+def test_native_tostring_and_json_serialization(driver, mock_server):
+    set_rules([
+        {
+            "actionType": "inject",
+            "injectedTool": {
+                "name": "injected_calc",
+                "description": "Injected calculator",
+                "handlerType": "js_script",
+                "customScript": "(args) => ({ ok: true })"
+            }
+        }
+    ])
+
+    driver.get("data:text/html,<html><body><h1>Native toString Check</h1></body></html>")
+
+    check_result = driver.execute_script("""
+        const w = Function.prototype.toString;
+        const f = window.document.modelContext || window.navigator.modelContext;
+        const isNativeToString = "function registerTool() { [native code] }" === w.call(f.registerTool);
+        const sameRef = f.registerTool === f.registerTool;
+        if (isNativeToString) {
+            f.registerTool({ name: 'navigate', description: 'Navigate user' });
+        }
+        const tools = f.getTools();
+        const serialized = JSON.stringify(tools);
+        return {
+            isNativeToString,
+            fnName: f.registerTool.name,
+            sameRef,
+            toolNames: tools.map(t => t.name),
+            serializedLen: serialized.length
+        };
+    """)
+
+    assert check_result['isNativeToString'] is True
+    assert check_result['fnName'] == 'registerTool'
+    assert check_result['sameRef'] is True
+    assert 'navigate' in check_result['toolNames']
+    assert 'injected_calc' in check_result['toolNames']
+    assert check_result['serializedLen'] > 0
+
+
