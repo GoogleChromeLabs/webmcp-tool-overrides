@@ -37,22 +37,85 @@
   let rulesLoaded = false;
   const queuedRegistrations = [];
 
+  // Preserve native Function.prototype.toString appearance ("[native code]")
+  // for sites that verify Function.prototype.toString.call(f.registerTool).
+  const nativeFunctionStrings = new WeakMap();
+  const origFunctionToString = Function.prototype.toString;
+
+  function markAsNative(fn, name) {
+    if (typeof fn !== 'function') return fn;
+    try {
+      Object.defineProperty(fn, 'name', { value: name, configurable: true });
+    } catch {
+      /* ignore */
+    }
+    nativeFunctionStrings.set(fn, `function ${name}() { [native code] }`);
+    return fn;
+  }
+
+  const wrappedFunctionToString = function toString() {
+    if (nativeFunctionStrings.has(this)) {
+      return nativeFunctionStrings.get(this);
+    }
+    return origFunctionToString.call(this);
+  };
+  markAsNative(wrappedFunctionToString, 'toString');
+  try {
+    Object.defineProperty(Function.prototype, 'toString', {
+      value: wrappedFunctionToString,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  } catch {
+    Function.prototype.toString = wrappedFunctionToString;
+  }
+
+  const origModelContextRegisterTool =
+    (window.ModelContext &&
+      window.ModelContext.prototype &&
+      window.ModelContext.prototype.registerTool) ||
+    null;
+
+  function invokeNativeRegisterTool(nativeTarget, tool, options) {
+    const target =
+      (nativeTarget && nativeTarget.__native_target__) || nativeTarget || nativeModelContext;
+    if (!target || !tool) return;
+    const cleanTool = {
+      name: String(tool.name),
+      description: String(tool.description || ''),
+      inputSchema: tool.inputSchema || tool.parameters || { type: 'object', properties: {} },
+      execute: tool.execute || tool.handler || tool.call || (async () => ({})),
+    };
+    const fn = origModelContextRegisterTool || target.registerTool;
+    if (typeof fn === 'function') {
+      try {
+        if (options !== undefined) {
+          return fn.call(target, cleanTool, options);
+        }
+        return fn.call(target, cleanTool);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   function flushQueuedRegistrations() {
     while (queuedRegistrations.length > 0) {
       const q = queuedRegistrations.shift();
       if (q.type === 'proxy') {
         const res = registerSingleTool(q.args[0], q.args[1]);
-        if (typeof q.target[q.prop] === 'function' && res !== false) {
-          try {
-            q.target[q.prop].apply(q.target, [res, q.args[1]]);
-          } catch {
-            /* ignore */
+        if (res !== false) {
+          if (Array.isArray(res)) {
+            res.forEach((t) => invokeNativeRegisterTool(q.target, t, q.args[1]));
+          } else {
+            invokeNativeRegisterTool(q.target, res, q.args[1]);
           }
         }
       } else if (q.type === 'prototype') {
         const res = registerSingleTool(q.args[0], q.args[1]);
-        if (res !== false && q.origRegisterTool) {
-          q.origRegisterTool.call(q.thisObj, res);
+        if (res !== false) {
+          invokeNativeRegisterTool(q.thisObj, res, q.args[1]);
         }
       } else if (q.type === 'event') {
         const res = registerSingleTool(q.event.detail);
@@ -81,20 +144,31 @@
   loadCachedRulesSynchronously();
 
   function safeGetHostProperty(hostObj, propName) {
-    if (!hostObj) return {};
+    if (!hostObj) return null;
     try {
-      const desc = Object.getOwnPropertyDescriptor(hostObj, propName);
-      if (desc && typeof desc.get === 'function') {
-        if (hostObj === document) return desc.get.call(document) || {};
-        if (hostObj === window.navigator) return desc.get.call(window.navigator) || {};
-        if (hostObj === window) return desc.get.call(window) || {};
-        return {};
+      let proto = hostObj;
+      while (proto) {
+        const desc = Object.getOwnPropertyDescriptor(proto, propName);
+        if (desc) {
+          if (typeof desc.get === 'function') {
+            return desc.get.call(hostObj) || null;
+          }
+          if ('value' in desc) {
+            return desc.value || null;
+          }
+        }
+        proto = Object.getPrototypeOf(proto);
       }
-      return hostObj[propName] || {};
+      return hostObj[propName] || null;
     } catch {
-      return {};
+      return null;
     }
   }
+
+  const nativeModelContext =
+    safeGetHostProperty(document, 'modelContext') ||
+    safeGetHostProperty(window.navigator, 'modelContext') ||
+    null;
 
   // --- Pattern Matcher & Evaluator Primitives ---
   function globToRegex(pattern) {
@@ -159,8 +233,8 @@
       ...tool,
       name: String(tool.name),
       description: tool.description ? String(tool.description) : '',
-      window: window,
     };
+    delete currentTool.window;
 
     const logs = [];
     let isModified = false;
@@ -386,7 +460,6 @@
           inputSchema: def.inputSchema || { type: 'object' },
           execute: executeFn,
           handler: executeFn,
-          window: window,
           __isInjected: true,
           groupId: group.id,
           ruleId: rule.id,
@@ -433,12 +506,16 @@
     }
     if (typeof arg1 === 'string') {
       if (arg2 && typeof arg2 === 'object') {
-        return { ...arg2, name: arg1 };
+        const copy = { ...arg2, name: arg1 };
+        delete copy.window;
+        return copy;
       }
       return { name: arg1 };
     }
     if (arg1 && typeof arg1 === 'object') {
-      return { ...arg1 };
+      const copy = { ...arg1 };
+      delete copy.window;
+      return copy;
     }
     return null;
   }
@@ -462,6 +539,9 @@
 
       if (evalResult.action !== 'blocked' && evalResult.tool) {
         registeredToolsMap.set(evalResult.tool.name, evalResult.tool);
+        if (evalResult.action === 'modified') {
+          invokeNativeRegisterTool(nativeModelContext, evalResult.tool);
+        }
       }
     });
   }
@@ -476,8 +556,8 @@
       /* ignore */
     }
 
-    flushQueuedRegistrations();
     reEvaluateRegisteredTools();
+    flushQueuedRegistrations();
     applyInjectedTools();
   }
 
@@ -522,44 +602,12 @@
     let addedCount = 0;
 
     injected.forEach((tool) => {
-      // 1. Prepare a clean standard tool for the native C++ bindings
-      const cleanTool = {
-        name: String(tool.name),
-        description: String(tool.description || ''),
-        inputSchema: tool.inputSchema || { type: 'object' },
-        execute: tool.execute || tool.handler || (async () => {}),
-      };
-
-      // 2. Forward to native registry for isolated world compatibility
-      try {
-        let nativeHost = null;
-        if (document.modelContext && document.modelContext.__native_target__) {
-          nativeHost = document.modelContext.__native_target__;
-        } else if (
-          window.navigator &&
-          window.navigator.modelContext &&
-          window.navigator.modelContext.__native_target__
-        ) {
-          nativeHost = window.navigator.modelContext.__native_target__;
-        }
-
-        if (
-          nativeHost &&
-          window.ModelContext &&
-          window.ModelContext.prototype &&
-          typeof window.ModelContext.prototype.__origRegisterTool === 'function'
-        ) {
-          window.ModelContext.prototype.__origRegisterTool.call(nativeHost, cleanTool);
-        } else if (nativeHost && typeof nativeHost.registerTool === 'function') {
-          // If prototype orig method not exposed, call directly (may hit our proxy, but cleanTool is safe)
-          nativeHost.registerTool(cleanTool);
-        }
-      } catch (e) {
-        console.error('[WebMCP Interceptor] Error registering injected tool natively:', e);
-      }
-
-      // 3. Update our internal JavaScript state
       if (!registeredToolsMap.has(tool.name)) {
+        try {
+          invokeNativeRegisterTool(nativeModelContext, tool);
+        } catch (e) {
+          console.error('[WebMCP Interceptor] Error registering injected tool natively:', e);
+        }
         registeredToolsMap.set(tool.name, tool);
         addedCount++;
 
@@ -624,50 +672,73 @@
   }
 
   // Create Intercepting Proxy Interface wrapper around any object
-  function createInterceptorProxy(targetObj = {}) {
-    return new Proxy(targetObj, {
-      get(target, prop, receiver) {
+  function createInterceptorProxy(targetObj) {
+    const actualTarget = targetObj || nativeModelContext || {};
+    const methodCache = new Map();
+
+    function getCachedMethod(name, factory) {
+      if (!methodCache.has(name)) {
+        const fn = markAsNative(factory(), name);
+        methodCache.set(name, fn);
+      }
+      return methodCache.get(name);
+    }
+
+    return new Proxy(actualTarget, {
+      get(target, prop) {
         if (prop === '__native_target__') return target;
-        if (prop === 'registerTool' || prop === 'addTool' || prop === 'register') {
-          return function (...args) {
+        if (
+          prop === 'registerTool' ||
+          prop === 'registerTools' ||
+          prop === 'addTool' ||
+          prop === 'register'
+        ) {
+          return getCachedMethod(String(prop), () => function (...args) {
             if (!rulesLoaded) {
               queuedRegistrations.push({ type: 'proxy', target, prop, args });
-              return;
+              return args[0];
             }
             const res = registerSingleTool(args[0], args[1]);
-            if (typeof target[prop] === 'function') {
-              try {
-                if (res !== false) {
-                  return target[prop].apply(target, [res, args[1]]);
-                }
-              } catch {
-                /* ignore */
+            if (res !== false) {
+              if (Array.isArray(res)) {
+                res.forEach((t) => invokeNativeRegisterTool(target, t, args[1]));
+              } else {
+                invokeNativeRegisterTool(target, res, args[1]);
               }
             }
             return res;
-          };
+          });
         }
-        if (prop === 'provideTools') {
-          return function (toolsArray) {
-            const processed = registerSingleTool(toolsArray);
-            if (typeof target[prop] === 'function') {
-              try {
-                return target[prop].call(target, processed || []);
-              } catch {
-                /* ignore */
-              }
+        if (prop === 'provideTools' || prop === 'provideContext') {
+          return getCachedMethod(String(prop), () => function (arg) {
+            const toolsArray = Array.isArray(arg)
+              ? arg
+              : arg && Array.isArray(arg.tools)
+                ? arg.tools
+                : [];
+            if (!rulesLoaded) {
+              queuedRegistrations.push({
+                type: 'proxy',
+                target,
+                prop: 'registerTools',
+                args: [toolsArray],
+              });
+              return toolsArray;
             }
-            return processed || [];
-          };
+            const processed = registerSingleTool(toolsArray);
+            const list = Array.isArray(processed) ? processed : processed ? [processed] : [];
+            list.forEach((t) => invokeNativeRegisterTool(target, t));
+            return list;
+          });
         }
         if (prop === 'getTools') {
-          return function () {
+          return getCachedMethod('getTools', () => function () {
             applyInjectedTools();
             return Array.from(registeredToolsMap.values());
-          };
+          });
         }
         if (prop === 'executeTool') {
-          return async function (toolObj, inputArgs) {
+          return getCachedMethod('executeTool', () => async function (toolObj, inputArgs) {
             const toolName = typeof toolObj === 'string' ? toolObj : toolObj && toolObj.name;
             const tool = registeredToolsMap.get(toolName) || toolAliases.get(toolName);
             if (tool) {
@@ -677,7 +748,7 @@
               }
             }
             throw new Error(`Tool "${toolName}" not found or not executable`);
-          };
+          });
         }
         if (prop === 'tools') {
           applyInjectedTools();
@@ -686,9 +757,13 @@
         if (prop === 'ontoolchange') {
           return onToolChangeHandler;
         }
-        return Reflect.get(target, prop, receiver);
+        const val = Reflect.get(target, prop, target);
+        if (typeof val === 'function') {
+          return getCachedMethod(String(prop), () => val.bind(target));
+        }
+        return val;
       },
-      set(target, prop, value, receiver) {
+      set(target, prop, value) {
         if (prop === 'ontoolchange') {
           onToolChangeHandler = value;
           return true;
@@ -705,7 +780,7 @@
           applyInjectedTools();
           return true;
         }
-        return Reflect.set(target, prop, value, receiver);
+        return Reflect.set(target, prop, value, target);
       },
     });
   }
@@ -714,7 +789,7 @@
   function bindGlobalPropertyTrap(hostObj, propName) {
     if (!hostObj) return;
 
-    let targetVal = safeGetHostProperty(hostObj, propName);
+    const targetVal = safeGetHostProperty(hostObj, propName) || nativeModelContext || {};
     let currentVal = createInterceptorProxy(targetVal);
 
     try {
@@ -730,28 +805,19 @@
           }
         },
         configurable: true,
-        enumerable: true,
+        enumerable: false,
       });
     } catch {
       hostObj[propName] = currentVal;
     }
   }
 
-  // Bind traps across standard WebMCP global targets and Prototype chains
+  // Bind traps across standard WebMCP global targets
   bindGlobalPropertyTrap(document, 'modelContext');
   bindGlobalPropertyTrap(window.navigator, 'modelContext');
   bindGlobalPropertyTrap(window.navigator, 'clientTools');
   bindGlobalPropertyTrap(window, 'modelContext');
   bindGlobalPropertyTrap(window, 'webmcp');
-
-  if (window.Document && window.Document.prototype) {
-    bindGlobalPropertyTrap(window.Document.prototype, 'modelContext');
-  }
-
-  if (window.Navigator && window.Navigator.prototype) {
-    bindGlobalPropertyTrap(window.Navigator.prototype, 'modelContext');
-    bindGlobalPropertyTrap(window.Navigator.prototype, 'clientTools');
-  }
 
   if (window.navigator.ai) {
     bindGlobalPropertyTrap(window.navigator.ai, 'tools');
@@ -762,20 +828,21 @@
     try {
       const origRegisterTool = window.ModelContext.prototype.registerTool;
       window.ModelContext.prototype.__origRegisterTool = origRegisterTool;
-      window.ModelContext.prototype.registerTool = function (...args) {
+      window.ModelContext.prototype.registerTool = markAsNative(function registerTool(...args) {
         if (!rulesLoaded) {
           queuedRegistrations.push({ type: 'prototype', thisObj: this, args, origRegisterTool });
-          return;
+          return args[0];
         }
         const res = registerSingleTool(args[0], args[1]);
         if (res === false) {
           return false;
         }
         if (origRegisterTool) {
-          return origRegisterTool.call(this, res);
+          const target = (this && this.__native_target__) || this;
+          return invokeNativeRegisterTool(target, res, args[1]);
         }
         return res;
-      };
+      }, 'registerTool');
 
       Object.defineProperty(window.ModelContext.prototype, 'tools', {
         get() {
@@ -783,7 +850,7 @@
           return Array.from(registeredToolsMap.values());
         },
         configurable: true,
-        enumerable: true,
+        enumerable: false,
       });
     } catch {
       /* ignore */
@@ -792,7 +859,7 @@
 
   // Intercept CustomEvent registrations
   const originalDispatchEvent = EventTarget.prototype.dispatchEvent;
-  EventTarget.prototype.dispatchEvent = function (event) {
+  EventTarget.prototype.dispatchEvent = markAsNative(function dispatchEvent(event) {
     if (event && event.type) {
       const typeLower = event.type.toLowerCase();
       if (
@@ -815,7 +882,7 @@
       }
     }
     return originalDispatchEvent.apply(this, arguments);
-  };
+  }, 'dispatchEvent');
 
   setTimeout(() => {
     if (!rulesLoaded) {
